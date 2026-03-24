@@ -1,0 +1,115 @@
+name: Build update-binary (ARM32 Android)
+
+on:
+  workflow_dispatch:
+    inputs:
+      android_version:
+        description: 'Android version branch (e.g. android-11.0.0_r48)'
+        required: true
+        default: 'android-11.0.0_r48'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git cmake ninja-build python3 \
+            libssl-dev pkg-config \
+            brotli libbrotli-dev zlib1g-dev
+
+      - name: Setup Android NDK
+        run: |
+          wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
+          unzip -q android-ndk-r25c-linux.zip
+          echo "NDK=${{ github.workspace }}/android-ndk-r25c" >> $GITHUB_ENV
+
+      - name: Clone AOSP recovery
+        run: |
+          git clone --depth=1 \
+            --branch ${{ github.event.inputs.android_version }} \
+            https://android.googlesource.com/platform/bootable/recovery \
+            recovery
+
+      - name: Clone AOSP system/core
+        run: |
+          git clone --depth=1 \
+            --branch ${{ github.event.inputs.android_version }} \
+            https://android.googlesource.com/platform/system/core \
+            core
+
+      - name: Clone AOSP system/extras (liblp)
+        run: |
+          git clone --depth=1 \
+            --branch ${{ github.event.inputs.android_version }} \
+            https://android.googlesource.com/platform/system/extras \
+            extras
+
+      - name: Clone AOSP system/logging
+        run: |
+          git clone --depth=1 \
+            --branch ${{ github.event.inputs.android_version }} \
+            https://android.googlesource.com/platform/system/logging \
+            logging
+
+      - name: Clone AOSP libziparchive
+        run: |
+          git clone --depth=1 \
+            --branch ${{ github.event.inputs.android_version }} \
+            https://android.googlesource.com/platform/system/libziparchive \
+            libziparchive
+
+      - name: Build update-binary (ARM32)
+        run: |
+          export TOOLCHAIN=${{ env.NDK }}/toolchains/llvm/prebuilt/linux-x86_64
+          export CC=$TOOLCHAIN/bin/armv7a-linux-androideabi21-clang
+          export CXX=$TOOLCHAIN/bin/armv7a-linux-androideabi21-clang++
+          export STRIP=$TOOLCHAIN/bin/llvm-strip
+
+          mkdir -p build_out
+
+          $CXX \
+            -O2 -std=c++17 -static \
+            -DANDROID \
+            -DANDROID_API=30 \
+            -DRECOVERY_API_VERSION=3 \
+            -D_FILE_OFFSET_BITS=64 \
+            -I recovery/updater/include \
+            -I recovery/otautil/include \
+            -I core/base/include \
+            -I core/libcutils/include \
+            -I logging/log/include \
+            -I extras/liblp/include \
+            -I libziparchive/include \
+            recovery/updater/updater_main.cpp \
+            recovery/updater/updater.cpp \
+            recovery/updater/blockdev.cpp \
+            recovery/updater/dynamic_partitions.cpp \
+            recovery/updater/install.cpp \
+            recovery/otautil/src/dirutil.cpp \
+            recovery/otautil/src/error_code.cpp \
+            recovery/otautil/src/paths.cpp \
+            recovery/otautil/src/sysutil.cpp \
+            core/base/file.cpp \
+            core/base/logging.cpp \
+            core/base/strings.cpp \
+            core/base/stringprintf.cpp \
+            libziparchive/zip_archive.cc \
+            libziparchive/zip_writer.cc \
+            libziparchive/zip_cd_entry_map.cc \
+            -lz -ldl \
+            -o build_out/update-binary
+
+          $STRIP build_out/update-binary
+          file build_out/update-binary
+          ls -lh build_out/update-binary
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-binary-ARM32-Android11
+          path: build_out/update-binary
+          retention-days: 30
