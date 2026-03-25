@@ -1,4 +1,4 @@
-name: Build update-binary (ARM32) - RUJAK BEBEG LEVEL 35
+name: Build update-binary (ARM32) - RUJAK BEBEG LEVEL 40
 
 on:
   workflow_dispatch:
@@ -19,24 +19,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: 🗑️ Purge Workflow Logs & Releases
+      - name: 🧹 Safe Cleanup
         run: |
-          echo "🔥 Membakar log history dan release lama..."
+          echo "🔥 Bakar log lama..."
           CURRENT_RUN_ID="${{ github.run_id }}"
-          gh run list --limit 100 --json databaseId -q '.[].databaseId' \
-          | grep -v "$CURRENT_RUN_ID" \
-          | xargs -I{} gh run delete {} || echo "Log aman."
-          
-          gh release list --limit 100 --json tagName -q '.[].tagName' \
-          | xargs -I{} gh release delete {} --yes --cleanup-tag || echo "Release aman."
-
-      - name: 🧹 Runtime Cleanup (Safe Version)
-        run: |
-          echo "🧹 Membersihkan area kerja (Kecuali vendor.tar.gz & .github)..."
-          # Sekarang folder .github DAN file vendor.tar.gz aman dari amukan ulekan
+          gh run list --limit 50 --json databaseId -q '.[].databaseId' | grep -v "$CURRENT_RUN_ID" | xargs -I{} gh run delete {} || echo "Log aman."
+          # Cleanup runtime tapi jaga folder .github dan vendor.tar.gz
           find . -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'vendor.tar.gz' ! -name '.' -exec rm -rf {} +
-          echo "✅ Sisa file di root:"
-          ls -F
 
       - name: Install dependencies
         run: |
@@ -49,7 +38,7 @@ jobs:
           unzip -q android-ndk-r25c-linux.zip
           echo "NDK=${{ github.workspace }}/android-ndk-r25c" >> $GITHUB_ENV
 
-      - name: Clone AOSP Repositories (Android 12)
+      - name: Clone AOSP Repositories (The Whole Gang)
         run: |
           BRANCH="android12-release"
           URL="https://android.googlesource.com/platform"
@@ -59,14 +48,25 @@ jobs:
           git clone --depth=1 --branch $BRANCH $URL/system/logging logging
           git clone --depth=1 --branch $BRANCH $URL/system/libziparchive libziparchive
           git clone --depth=1 --branch $BRANCH $URL/system/core core
-          git clone --depth=1 --branch $BRANCH $URL/system/extras extras
+          
+          # Pelengkap biang kerok error dmesg.txt
           git clone --depth=1 --branch $BRANCH $URL/external/boringssl boringssl
           git clone --depth=1 --branch $BRANCH $URL/external/brotli brotli
+          git clone --depth=1 --branch $BRANCH $URL/external/bsdiff bsdiff
+          git clone --depth=1 --branch $BRANCH $URL/external/fec fec
           git clone --depth=1 --branch $BRANCH $URL/external/zlib zlib
           git clone --depth=1 --branch $BRANCH $URL/external/selinux selinux
 
-      - name: Create Dummy & Fix Headers
+      - name: 🛠️ Patching Source (Anti Mak Errot)
         run: |
+          # Fix error windows.h di utf8.cpp
+          sed -i 's/#include <windows.h>/\/\/#include <windows.h>/g' libbase/utf8.cpp
+          
+          # Fix error type mismatch di imgpatch.cpp (const char cast)
+          sed -i 's/strm.next_in = data/strm.next_in = const_cast<Bytef*>(data)/g' recovery/applypatch/imgpatch.cpp
+          sed -i 's/strm.next_in = old_data/strm.next_in = const_cast<Bytef*>(old_data)/g' recovery/applypatch/imgpatch.cpp
+          
+          # Create Dummy Headers
           mkdir -p fake_headers/gtest
           mkdir -p fake_headers/utils
           echo "#define FRIEND_TEST(a, b)" > fake_headers/gtest/gtest_prod.h
@@ -95,8 +95,8 @@ jobs:
             -I . -I fake_headers -I recovery -I recovery/include -I recovery/updater/include \
             -I recovery/otautil/include -I recovery/edify/include -I recovery/applypatch/include \
             -I libbase/include -I logging/liblog/include -I core/libcutils/include \
-            -I core/libsparse/include -I extras/liblp/include -I libziparchive/include \
-            -I boringssl/src/include -I brotli/c/include -I zlib \
+            -I core/libsparse/include -I libziparchive/include \
+            -I boringssl/src/include -I brotli/c/include -I bsdiff/include -I fec/include -I zlib \
             $RECOVERY_SRCS $BASE_SRCS $BROTLI_SRCS \
             -lz -ldl -lc++_static \
             -o build_out/update-binary
@@ -107,5 +107,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: update-binary-bebeg-v35
+          name: update-binary-bebeg-v40
           path: build_out/update-binary
