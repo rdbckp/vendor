@@ -1,4 +1,4 @@
-name: Build update-binary (ARM32) - RUJAK BEBEG LEVEL 40
+name: Build update-binary (ARM32) - STRIKE 2
 
 on:
   workflow_dispatch:
@@ -19,12 +19,12 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: 🧹 Safe Cleanup
+      - name: 🧹 Safe Runtime Cleanup
         run: |
-          echo "🔥 Bakar log lama..."
+          echo "🔥 Ngabisin log & release lama..."
           CURRENT_RUN_ID="${{ github.run_id }}"
           gh run list --limit 50 --json databaseId -q '.[].databaseId' | grep -v "$CURRENT_RUN_ID" | xargs -I{} gh run delete {} || echo "Log aman."
-          # Cleanup runtime tapi jaga folder .github dan vendor.tar.gz
+          # Jaga .github (biar gak bunuh diri lagi) dan vendor.tar.gz
           find . -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'vendor.tar.gz' ! -name '.' -exec rm -rf {} +
 
       - name: Install dependencies
@@ -38,8 +38,9 @@ jobs:
           unzip -q android-ndk-r25c-linux.zip
           echo "NDK=${{ github.workspace }}/android-ndk-r25c" >> $GITHUB_ENV
 
-      - name: Clone AOSP Repositories (The Whole Gang)
+      - name: Clone AOSP Repositories (Strict Android 12)
         run: |
+          # Pake satu branch yang sama biar gak bentrok ABI-nya
           BRANCH="android12-release"
           URL="https://android.googlesource.com/platform"
           
@@ -48,29 +49,27 @@ jobs:
           git clone --depth=1 --branch $BRANCH $URL/system/logging logging
           git clone --depth=1 --branch $BRANCH $URL/system/libziparchive libziparchive
           git clone --depth=1 --branch $BRANCH $URL/system/core core
-          
-          # Pelengkap biang kerok error dmesg.txt
+          git clone --depth=1 --branch $BRANCH $URL/system/extras extras
           git clone --depth=1 --branch $BRANCH $URL/external/boringssl boringssl
           git clone --depth=1 --branch $BRANCH $URL/external/brotli brotli
           git clone --depth=1 --branch $BRANCH $URL/external/bsdiff bsdiff
           git clone --depth=1 --branch $BRANCH $URL/external/fec fec
           git clone --depth=1 --branch $BRANCH $URL/external/zlib zlib
-          git clone --depth=1 --branch $BRANCH $URL/external/selinux selinux
 
-      - name: 🛠️ Patching Source (Anti Mak Errot)
+      - name: 🛠️ Jamu & Filter Source (Surgical)
         run: |
-          # Fix error windows.h di utf8.cpp
+          # 1. Bypass Windows headers
           sed -i 's/#include <windows.h>/\/\/#include <windows.h>/g' libbase/utf8.cpp
           
-          # Fix error type mismatch di imgpatch.cpp (const char cast)
+          # 2. Fix compiler kaku (const cast)
           sed -i 's/strm.next_in = data/strm.next_in = const_cast<Bytef*>(data)/g' recovery/applypatch/imgpatch.cpp
           sed -i 's/strm.next_in = old_data/strm.next_in = const_cast<Bytef*>(old_data)/g' recovery/applypatch/imgpatch.cpp
           
-          # Create Dummy Headers
+          # 3. Create Fake Headers (Strictly mapping)
           mkdir -p fake_headers/gtest
           mkdir -p fake_headers/utils
           echo "#define FRIEND_TEST(a, b)" > fake_headers/gtest/gtest_prod.h
-          touch fake_headers/gtest/gtest.h
+          echo "" > fake_headers/gtest/gtest.h
           echo "#define LIBLOG_LOG_TAG 1000" > fake_headers/log_tag_def.h
           echo "#define SNET_EVENT_LOG_TAG 1397638484" >> fake_headers/log_tag_def.h
           touch fake_headers/utils/FastStrcmp.h
@@ -83,11 +82,13 @@ jobs:
           
           mkdir -p build_out
 
-          RECOVERY_SRCS=$(find recovery/updater recovery/otautil recovery/applypatch recovery/edify -name "*.cpp" | grep -vE "test|simulator|target_files" | tr '\n' ' ')
-          BASE_SRCS=$(find libbase logging/liblog libziparchive -name "*.cpp" -o -name "*.c" | grep -vE "test|benchmark|windows|fuzz|incfs" | tr '\n' ' ')
+          # FILTER SUPER KETAT: Buang semua yang ada kata "test", "benchmark", "fuzz", "simulator"
+          RECOVERY_SRCS=$(find recovery/updater recovery/otautil recovery/applypatch recovery/edify -name "*.cpp" | grep -vE "test|benchmark|fuzz|simulator|target_files" | tr '\n' ' ')
+          BASE_SRCS=$(find libbase logging/liblog libziparchive -name "*.cpp" -o -name "*.c" | grep -vE "test|benchmark|fuzz|windows|incfs" | tr '\n' ' ')
           BROTLI_SRCS=$(find brotli/c/common brotli/c/dec -name "*.c" | tr '\n' ' ')
           
-          $CXX -O2 -std=c++17 -static \
+          # EKSEKUSI: Pake C++20 buat ngilangin error starts_with
+          $CXX -O2 -std=c++20 -static \
             -DANDROID -DANDROID_API=30 \
             -DRECOVERY_API_VERSION=3 \
             -D_FILE_OFFSET_BITS=64 \
@@ -95,7 +96,7 @@ jobs:
             -I . -I fake_headers -I recovery -I recovery/include -I recovery/updater/include \
             -I recovery/otautil/include -I recovery/edify/include -I recovery/applypatch/include \
             -I libbase/include -I logging/liblog/include -I core/libcutils/include \
-            -I core/libsparse/include -I libziparchive/include \
+            -I core/libsparse/include -I extras/liblp/include -I libziparchive/include \
             -I boringssl/src/include -I brotli/c/include -I bsdiff/include -I fec/include -I zlib \
             $RECOVERY_SRCS $BASE_SRCS $BROTLI_SRCS \
             -lz -ldl -lc++_static \
@@ -107,5 +108,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: update-binary-bebeg-v40
+          name: update-binary-strike2
           path: build_out/update-binary
