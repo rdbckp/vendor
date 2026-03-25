@@ -1,4 +1,4 @@
-name: Build update-binary (ARM32) - RUJAK BEBEG CABE 8
+name: Build update-binary (ARM32) - RUJAK BEBEG LEVEL 10
 
 on:
   workflow_dispatch:
@@ -14,21 +14,19 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git cmake ninja-build python3 libssl-dev pkg-config brotli libbrotli-dev zlib1g-dev
+          sudo apt-get install -y git cmake ninja-build python3 libssl-dev pkg-config brotli libbrotli-dev zlib1g-dev liblzma-dev
 
-      - name: Setup Android NDK (r23b)
+      - name: Setup Android NDK (r25c)
         run: |
-          # Tetep pake r23b biar aman dari penyakit fdsan di Samsung A02 loe
-          wget -q https://dl.google.com/android/repository/android-ndk-r23b-linux.zip
-          unzip -q android-ndk-r23b-linux.zip
-          echo "NDK=${{ github.workspace }}/android-ndk-r23b" >> $GITHUB_ENV
+          # Ganti ke r25c sesuai request, siapa tau emang r23b udah gak kuat nahan pedes
+          wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
+          unzip -q android-ndk-r25c-linux.zip
+          echo "NDK=${{ github.workspace }}/android-ndk-r25c" >> $GITHUB_ENV
 
-      - name: Clone AOSP Repositories (Verified Android 12)
+      - name: Clone AOSP Repositories (Android 12)
         run: |
-          # Sesuai instruksi suhu: pake branch android12-release
           BRANCH="android12-release"
           URL="https://android.googlesource.com/platform"
-          
           git clone --depth=1 --branch $BRANCH $URL/bootable/recovery recovery
           git clone --depth=1 --branch $BRANCH $URL/system/libbase libbase
           git clone --depth=1 --branch $BRANCH $URL/system/logging logging
@@ -36,16 +34,20 @@ jobs:
           git clone --depth=1 --branch $BRANCH $URL/system/core core
           git clone --depth=1 --branch $BRANCH $URL/system/extras extras
           git clone --depth=1 --branch $BRANCH $URL/external/selinux selinux
-          
-          # Cek lokasi biar gak stat error lagi
-          ls -d recovery libbase logging libziparchive core extras selinux
+          git clone --depth=1 --branch $BRANCH $URL/external/boringssl boringssl
+          git clone --depth=1 --branch $BRANCH $URL/external/zlib zlib
+          git clone --depth=1 --branch $BRANCH $URL/external/libcxx libcxx
 
-      - name: Create Dummy Headers
+      - name: Create Dummy & Fix Headers
         run: |
-          # Ngebisukan gtest biar gak ngerujak build-nya
+          # Bypass gtest & fix missing defines buat liblog
           mkdir -p fake_headers/gtest
+          mkdir -p fake_headers/utils
           echo "#define FRIEND_TEST(a, b)" > fake_headers/gtest/gtest_prod.h
           touch fake_headers/gtest/gtest.h
+          echo "#define LIBLOG_LOG_TAG 1000" > fake_headers/log_tag_def.h
+          echo "#define SNET_EVENT_LOG_TAG 1397638484" >> fake_headers/log_tag_def.h
+          touch fake_headers/utils/FastStrcmp.h
 
       - name: Build update-binary
         run: |
@@ -55,25 +57,33 @@ jobs:
           
           mkdir -p build_out
 
-          # Filter super pedes: buang file test, windows, dan yang gak penting
-          # Di Android 12, path logging ada di logging/liblog
-          RECOVERY_SRCS=$(find recovery/updater recovery/otautil recovery/applypatch -name "*.cpp" | grep -v "test" | tr '\n' ' ')
-          BASE_SRCS=$(find libbase logging/liblog libziparchive -name "*.cpp" -o -name "*.c" | grep -vE "test|benchmark|windows|fuzz" | tr '\n' ' ')
+          # Filter file .cpp: Buang yang bau-bau windows, test, dan simulator
+          RECOVERY_SRCS=$(find recovery/updater recovery/otautil recovery/applypatch recovery/edify -name "*.cpp" | grep -vE "test|simulator|target_files" | tr '\n' ' ')
+          BASE_SRCS=$(find libbase logging/liblog libziparchive -name "*.cpp" -o -name "*.c" | grep -vE "test|benchmark|windows|fuzz|incfs" | tr '\n' ' ')
           
+          # Hajar pake include yang komplit banget sampe ke akarnya
           $CXX -O2 -std=c++17 -static \
             -DANDROID -DANDROID_API=30 \
             -DRECOVERY_API_VERSION=3 \
+            -D_FILE_OFFSET_BITS=64 \
+            -include fake_headers/log_tag_def.h \
             -I . \
             -I fake_headers \
             -I recovery \
+            -I recovery/include \
             -I recovery/updater/include \
             -I recovery/otautil/include \
+            -I recovery/edify/include \
+            -I recovery/applypatch/include \
             -I libbase/include \
             -I logging/liblog/include \
             -I core/libcutils/include \
+            -I core/libsparse/include \
             -I extras/liblp/include \
             -I libziparchive/include \
             -I selinux/libselinux/include \
+            -I boringssl/src/include \
+            -I zlib \
             $RECOVERY_SRCS \
             $BASE_SRCS \
             -lz -ldl -lc++_static \
@@ -85,5 +95,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: update-binary-rujak-bebeg
+          name: update-binary-pedes-mampus
           path: build_out/update-binary
