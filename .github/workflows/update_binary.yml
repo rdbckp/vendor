@@ -6,7 +6,7 @@ on:
       android_version:
         description: 'Android version branch (e.g. android-11.0.0_r48)'
         required: true
-        default: 'android-11.0.0_r48'
+        default: 'android11-release'
 
 jobs:
   build:
