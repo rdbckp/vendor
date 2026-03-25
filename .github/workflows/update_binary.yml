@@ -1,4 +1,4 @@
-name: Build update-binary (ARM32 Android 11) - MASTER BAKPAO
+name: Build update-binary (ARM32) - VERSI TUKANG MARTABAK
 
 on:
   workflow_dispatch:
@@ -22,10 +22,10 @@ jobs:
           unzip -q android-ndk-r23b-linux.zip
           echo "NDK=${{ github.workspace }}/android-ndk-r23b" >> $GITHUB_ENV
 
-      - name: Clone AOSP Repositories (Strict Android 11)
+      - name: Clone AOSP Repositories (Strict Android 10)
         run: |
-          # Pake android11-release biar SEMUA repo sinkron di API 30
-          BRANCH="android11-release"
+          # Pake branch r47 Android 10 biar PASTI ADA dan compatible C++17
+          BRANCH="android-10.0.0_r47"
           git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/bootable/recovery recovery
           git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/core core
           git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/libbase libbase
@@ -33,14 +33,13 @@ jobs:
           git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/libziparchive libziparchive
           git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/extras extras
           git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/external/selinux selinux
-          git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/external/bsdiff bsdiff
 
-      - name: Create Dummy Headers for Bypass
+      - name: Create Dummy Headers
         run: |
-          # Ngebypass error 'gtest/gtest_prod.h' tanpa harus narik full repo testing Google
+          # Bypass gtest biar gak ribet
           mkdir -p fake_headers/gtest
-          echo "#define FRIEND_TEST(test_case_name, test_name)" > fake_headers/gtest/gtest_prod.h
-          echo "#define EXPECT_EQ(a, b)" > fake_headers/gtest/gtest.h
+          echo "#define FRIEND_TEST(a, b)" > fake_headers/gtest/gtest_prod.h
+          echo "" > fake_headers/gtest/gtest.h
 
       - name: Build update-binary
         run: |
@@ -50,30 +49,27 @@ jobs:
           
           mkdir -p build_out
 
-          # FILTER CERDAS: Ambil .cpp tapi BUANG semua test, benchmark, dan windows
-          RECOVERY_SRCS=$(find recovery/updater recovery/otautil recovery/applypatch recovery/edify -name "*.cpp" 2>/dev/null | grep -v "test" | tr '\n' ' ')
-          CORE_SRCS=$(find core/libcutils libbase logging/liblog libziparchive -name "*.cpp" -o -name "*.cc" 2>/dev/null | grep -v "test" | grep -v "benchmark" | grep -v "windows" | grep -v "fuzz" | tr '\n' ' ')
+          # Cari file .cpp tapi BUANG file test, windows, dan benchmark
+          # Folder libbase di Android 10 lebih simpel
+          RECOVERY_SRCS=$(find recovery/updater recovery/otautil recovery/applypatch -name "*.cpp" | grep -v "test" | tr '\n' ' ')
+          BASE_SRCS=$(find libbase logging/liblog libziparchive -name "*.cpp" -o -name "*.c" | grep -v "test" | grep -v "benchmark" | grep -v "windows" | tr '\n' ' ')
           
           $CXX -O2 -std=c++17 -static \
             -DANDROID -DANDROID_API=30 \
             -DRECOVERY_API_VERSION=3 \
-            -D_FILE_OFFSET_BITS=64 \
             -I . \
             -I fake_headers \
             -I recovery \
             -I recovery/updater/include \
             -I recovery/otautil/include \
-            -I recovery/edify/include \
-            -I core/libcutils/include \
             -I libbase/include \
             -I logging/liblog/include \
             -I extras/liblp/include \
             -I libziparchive/include \
             -I selinux/libselinux/include \
-            -I bsdiff/include \
             $RECOVERY_SRCS \
-            $CORE_SRCS \
-            -lz -ldl -lc++_static -lssl -lcrypto \
+            $BASE_SRCS \
+            -lz -ldl -lc++_static \
             -o build_out/update-binary
 
           $STRIP build_out/update-binary
@@ -82,5 +78,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: update-binary-arm32
+          name: update-binary-martabak
           path: build_out/update-binary
