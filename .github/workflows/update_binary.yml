@@ -1,4 +1,4 @@
-name: Build update-binary (ARM32 Android 11)
+name: Build update-binary (ARM32 Android 11) - FIXED
 
 on:
   workflow_dispatch:
@@ -16,89 +16,42 @@ jobs:
             libssl-dev pkg-config \
             brotli libbrotli-dev zlib1g-dev
 
-      - name: Setup Android NDK
+      - name: Setup Android NDK (r23b)
         run: |
-          wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
-          unzip -q android-ndk-r25c-linux.zip
-          echo "NDK=${{ github.workspace }}/android-ndk-r25c" >> $GITHUB_ENV
+          # Pake r23b biar gak kena error 'android_fdsan_create_owner_tag'
+          wget -q https://dl.google.com/android/repository/android-ndk-r23b-linux.zip
+          unzip -q android-ndk-r23b-linux.zip
+          echo "NDK=${{ github.workspace }}/android-ndk-r23b" >> $GITHUB_ENV
 
-      - name: Clone AOSP bootable/recovery
+      - name: Clone AOSP Repositories
         run: |
-          git clone --depth=1 \
-            --branch android-11.0.0_r48 \
-            https://android.googlesource.com/platform/bootable/recovery \
-            recovery
+          # Clone semua repo yang dibutuhin buat compile
+          git clone --depth=1 --branch android-11.0.0_r48 https://android.googlesource.com/platform/bootable/recovery recovery
+          git clone --depth=1 --branch android-11.0.0_r48 https://android.googlesource.com/platform/system/core core
+          git clone --depth=1 --branch android-11.0.0_r48 https://android.googlesource.com/platform/system/logging logging
+          git clone --depth=1 --branch android-11.0.0_r48 https://android.googlesource.com/platform/system/libbase libbase
+          git clone --depth=1 --branch android-11.0.0_r48 https://android.googlesource.com/platform/system/libziparchive libziparchive
+          git clone --depth=1 --branch android-11.0.0_r48 https://android.googlesource.com/platform/system/extras extras
 
-      - name: Clone AOSP system/core
+      - name: Build update-binary
         run: |
-          git clone --depth=1 \
-            --branch android-11.0.0_r48 \
-            https://android.googlesource.com/platform/system/core \
-            core
-
-      - name: Clone AOSP system/extras (liblp)
-        run: |
-          git clone --depth=1 \
-            --branch android-11.0.0_r48 \
-            https://android.googlesource.com/platform/system/extras \
-            extras
-
-      - name: Clone AOSP system/logging
-        run: |
-          git clone --depth=1 \
-            --branch android11-release \
-            https://android.googlesource.com/platform/system/logging \
-            logging
-
-      - name: Clone AOSP system/libziparchive
-        run: |
-          git clone --depth=1 \
-            --branch android10-release \
-            https://android.googlesource.com/platform/system/libziparchive \
-            libziparchive
-
-      - name: Clone AOSP system/libbase
-        run: |
-          git clone --depth=1 \
-            --branch android10-release \
-            https://android.googlesource.com/platform/system/libbase \
-            libbase
-
-      - name: List recovery/updater source files
-        run: |
-          echo "=== recovery/updater ==="
-          ls recovery/updater/ || true
-          echo "=== recovery/otautil ==="
-          ls recovery/otautil/ || true
-          echo "=== recovery/otautil/src ==="
-          ls recovery/otautil/src/ || true
-
-      - name: Build update-binary (ARM32)
-        run: |
-          export TOOLCHAIN=${{ env.NDK }}/toolchains/llvm/prebuilt/linux-x86_64
-          export CC=$TOOLCHAIN/bin/armv7a-linux-androideabi21-clang
-          export CXX=$TOOLCHAIN/bin/armv7a-linux-androideabi21-clang++
+          export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+          # Target armv7a buat Android API 30 (Android 11)
+          export CXX=$TOOLCHAIN/bin/armv7a-linux-androideabi30-clang++
           export STRIP=$TOOLCHAIN/bin/llvm-strip
-
+          
           mkdir -p build_out
 
-          # Cari semua source files yang ada
-          RECOVERY_SRCS=$(find recovery/updater -name "*.cpp" 2>/dev/null | tr '\n' ' ')
-          OTAUTIL_SRCS=$(find recovery/otautil/src -name "*.cpp" 2>/dev/null | tr '\n' ' ')
-          CORE_SRCS=$(find core/base -name "*.cpp" 2>/dev/null | grep -v test | tr '\n' ' ')
-          LIBBASE_SRCS=$(find libbase -name "*.cpp" 2>/dev/null | grep -v test | tr '\n' ' ')
-          ZIP_SRCS=$(find libziparchive -name "*.cc" -o -name "*.cpp" 2>/dev/null | grep -v test | tr '\n' ' ')
-          LOGGING_SRCS=$(find logging/log -name "*.cpp" 2>/dev/null | grep -v test | tr '\n' ' ')
-
-          echo "Recovery sources: $RECOVERY_SRCS"
-          echo "Otautil sources: $OTAUTIL_SRCS"
-
-          $CXX \
-            -O2 -std=c++17 \
-            -DANDROID \
-            -DANDROID_API=30 \
+          # Analisa Error: 
+          # 1. -I recovery: Biar compiler nemu <applypatch/applypatch.h>
+          # 2. Source recovery/applypatch/*.cpp: Harus ikut di-compile biar gak missing symbol
+          
+          $CXX -O2 -std=c++17 -static \
+            -DANDROID -DANDROID_API=30 \
             -DRECOVERY_API_VERSION=3 \
             -D_FILE_OFFSET_BITS=64 \
+            -I . \
+            -I recovery \
             -I recovery/updater/include \
             -I recovery/otautil/include \
             -I core/base/include \
@@ -106,40 +59,18 @@ jobs:
             -I logging/log/include \
             -I extras/liblp/include \
             -I libziparchive/include \
-            $RECOVERY_SRCS \
-            $OTAUTIL_SRCS \
-            $LOGGING_SRCS \
-            -lz -ldl \
-            -o build_out/update-binary 2>&1 || true
+            recovery/updater/*.cpp \
+            recovery/otautil/*.cpp \
+            recovery/applypatch/*.cpp \
+            core/base/*.cpp \
+            -lz -ldl -lc++_static \
+            -o build_out/update-binary
 
-          # Kalau gagal, coba static
-          if [ ! -f build_out/update-binary ]; then
-            echo "Trying static build..."
-            $CXX \
-              -O2 -std=c++17 -static \
-              -DANDROID \
-              -DANDROID_API=30 \
-              -DRECOVERY_API_VERSION=3 \
-              -D_FILE_OFFSET_BITS=64 \
-              -I recovery/updater/include \
-              -I recovery/otautil/include \
-              -I libbase/include \
-              -I logging/log/include \
-              -I extras/liblp/include \
-              -I libziparchive/include \
-              $RECOVERY_SRCS \
-              $OTAUTIL_SRCS \
-              -lz -ldl \
-              -o build_out/update-binary
-          fi
-
-          $STRIP build_out/update-binary 2>/dev/null || true
-          file build_out/update-binary
+          $STRIP build_out/update-binary
           ls -lh build_out/update-binary
 
-      - name: Upload artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: update-binary-ARM32-Android11
+          name: update-binary-arm32
           path: build_out/update-binary
-          retention-days: 30
