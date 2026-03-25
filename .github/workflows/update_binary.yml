@@ -1,4 +1,4 @@
-name: Build update-binary (ARM32) - VERSI TUKANG MARTABAK
+name: Build update-binary (ARM32) - VERSI TUKANG PARKIR
 
 on:
   workflow_dispatch:
@@ -22,24 +22,28 @@ jobs:
           unzip -q android-ndk-r23b-linux.zip
           echo "NDK=${{ github.workspace }}/android-ndk-r23b" >> $GITHUB_ENV
 
-      - name: Clone AOSP Repositories (Strict Android 10)
+      - name: Clone AOSP Repositories (Strict r45 Check)
         run: |
-          # Pake branch r47 Android 10 biar PASTI ADA dan compatible C++17
-          BRANCH="android-10.0.0_r47"
-          git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/bootable/recovery recovery
-          git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/core core
-          git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/libbase libbase
-          git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/logging logging
-          git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/libziparchive libziparchive
-          git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/system/extras extras
-          git clone --depth=1 --branch $BRANCH https://android.googlesource.com/platform/external/selinux selinux
+          # Pake r45 karena ini branch "titik temu" semua repo AOSP
+          BRANCH="android-10.0.0_r45"
+          URL="https://android.googlesource.com/platform"
+          
+          git clone --depth=1 --branch $BRANCH $URL/bootable/recovery recovery
+          git clone --depth=1 --branch $BRANCH $URL/system/core core
+          git clone --depth=1 --branch $BRANCH $URL/system/libbase libbase
+          git clone --depth=1 --branch $BRANCH $URL/system/logging logging
+          git clone --depth=1 --branch $BRANCH $URL/system/libziparchive libziparchive
+          git clone --depth=1 --branch $BRANCH $URL/system/extras extras
+          git clone --depth=1 --branch $BRANCH $URL/external/selinux selinux
+          
+          # Cek isi folder buat mastiin cloning sukses
+          ls -d recovery libbase logging core libziparchive extras selinux
 
       - name: Create Dummy Headers
         run: |
-          # Bypass gtest biar gak ribet
           mkdir -p fake_headers/gtest
           echo "#define FRIEND_TEST(a, b)" > fake_headers/gtest/gtest_prod.h
-          echo "" > fake_headers/gtest/gtest.h
+          touch fake_headers/gtest/gtest.h
 
       - name: Build update-binary
         run: |
@@ -49,10 +53,9 @@ jobs:
           
           mkdir -p build_out
 
-          # Cari file .cpp tapi BUANG file test, windows, dan benchmark
-          # Folder libbase di Android 10 lebih simpel
+          # Filter file .cpp (Buang test, windows, benchmark, fuzz)
           RECOVERY_SRCS=$(find recovery/updater recovery/otautil recovery/applypatch -name "*.cpp" | grep -v "test" | tr '\n' ' ')
-          BASE_SRCS=$(find libbase logging/liblog libziparchive -name "*.cpp" -o -name "*.c" | grep -v "test" | grep -v "benchmark" | grep -v "windows" | tr '\n' ' ')
+          BASE_SRCS=$(find libbase logging/liblog libziparchive -name "*.cpp" -o -name "*.c" | grep -vE "test|benchmark|windows|fuzz" | tr '\n' ' ')
           
           $CXX -O2 -std=c++17 -static \
             -DANDROID -DANDROID_API=30 \
@@ -78,5 +81,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: update-binary-martabak
+          name: update-binary-r45
           path: build_out/update-binary
