@@ -1,12 +1,7 @@
-name: Build update-binary (ARM32 Android)
+name: Build update-binary (ARM32 Android 11)
 
 on:
   workflow_dispatch:
-    inputs:
-      android_version:
-        description: 'Android version branch (e.g. android-11.0.0_r48)'
-        required: true
-        default: 'android11-release'
 
 jobs:
   build:
@@ -27,40 +22,56 @@ jobs:
           unzip -q android-ndk-r25c-linux.zip
           echo "NDK=${{ github.workspace }}/android-ndk-r25c" >> $GITHUB_ENV
 
-      - name: Clone AOSP recovery
+      - name: Clone AOSP bootable/recovery
         run: |
           git clone --depth=1 \
-            --branch ${{ github.event.inputs.android_version }} \
+            --branch android-11.0.0_r48 \
             https://android.googlesource.com/platform/bootable/recovery \
             recovery
 
       - name: Clone AOSP system/core
         run: |
           git clone --depth=1 \
-            --branch ${{ github.event.inputs.android_version }} \
+            --branch android-11.0.0_r48 \
             https://android.googlesource.com/platform/system/core \
             core
 
       - name: Clone AOSP system/extras (liblp)
         run: |
           git clone --depth=1 \
-            --branch ${{ github.event.inputs.android_version }} \
+            --branch android-11.0.0_r48 \
             https://android.googlesource.com/platform/system/extras \
             extras
 
       - name: Clone AOSP system/logging
         run: |
           git clone --depth=1 \
-            --branch ${{ github.event.inputs.android_version }} \
+            --branch android-11.0.0_r48 \
             https://android.googlesource.com/platform/system/logging \
             logging
 
-      - name: Clone AOSP libziparchive
+      - name: Clone AOSP system/libziparchive
         run: |
           git clone --depth=1 \
-            --branch ${{ github.event.inputs.android_version }} \
+            --branch android-11.0.0_r48 \
             https://android.googlesource.com/platform/system/libziparchive \
             libziparchive
+
+      - name: Clone AOSP system/libbase
+        run: |
+          git clone --depth=1 \
+            --branch android-11.0.0_r48 \
+            https://android.googlesource.com/platform/system/libbase \
+            libbase
+
+      - name: List recovery/updater source files
+        run: |
+          echo "=== recovery/updater ==="
+          ls recovery/updater/ || true
+          echo "=== recovery/otautil ==="
+          ls recovery/otautil/ || true
+          echo "=== recovery/otautil/src ==="
+          ls recovery/otautil/src/ || true
 
       - name: Build update-binary (ARM32)
         run: |
@@ -71,8 +82,19 @@ jobs:
 
           mkdir -p build_out
 
+          # Cari semua source files yang ada
+          RECOVERY_SRCS=$(find recovery/updater -name "*.cpp" 2>/dev/null | tr '\n' ' ')
+          OTAUTIL_SRCS=$(find recovery/otautil/src -name "*.cpp" 2>/dev/null | tr '\n' ' ')
+          CORE_SRCS=$(find core/base -name "*.cpp" 2>/dev/null | grep -v test | tr '\n' ' ')
+          LIBBASE_SRCS=$(find libbase -name "*.cpp" 2>/dev/null | grep -v test | tr '\n' ' ')
+          ZIP_SRCS=$(find libziparchive -name "*.cc" -o -name "*.cpp" 2>/dev/null | grep -v test | tr '\n' ' ')
+          LOGGING_SRCS=$(find logging/log -name "*.cpp" 2>/dev/null | grep -v test | tr '\n' ' ')
+
+          echo "Recovery sources: $RECOVERY_SRCS"
+          echo "Otautil sources: $OTAUTIL_SRCS"
+
           $CXX \
-            -O2 -std=c++17 -static \
+            -O2 -std=c++17 \
             -DANDROID \
             -DANDROID_API=30 \
             -DRECOVERY_API_VERSION=3 \
@@ -80,30 +102,38 @@ jobs:
             -I recovery/updater/include \
             -I recovery/otautil/include \
             -I core/base/include \
-            -I core/libcutils/include \
+            -I libbase/include \
             -I logging/log/include \
             -I extras/liblp/include \
             -I libziparchive/include \
-            recovery/updater/updater_main.cpp \
-            recovery/updater/updater.cpp \
-            recovery/updater/blockdev.cpp \
-            recovery/updater/dynamic_partitions.cpp \
-            recovery/updater/install.cpp \
-            recovery/otautil/src/dirutil.cpp \
-            recovery/otautil/src/error_code.cpp \
-            recovery/otautil/src/paths.cpp \
-            recovery/otautil/src/sysutil.cpp \
-            core/base/file.cpp \
-            core/base/logging.cpp \
-            core/base/strings.cpp \
-            core/base/stringprintf.cpp \
-            libziparchive/zip_archive.cc \
-            libziparchive/zip_writer.cc \
-            libziparchive/zip_cd_entry_map.cc \
+            $RECOVERY_SRCS \
+            $OTAUTIL_SRCS \
+            $LOGGING_SRCS \
             -lz -ldl \
-            -o build_out/update-binary
+            -o build_out/update-binary 2>&1 || true
 
-          $STRIP build_out/update-binary
+          # Kalau gagal, coba static
+          if [ ! -f build_out/update-binary ]; then
+            echo "Trying static build..."
+            $CXX \
+              -O2 -std=c++17 -static \
+              -DANDROID \
+              -DANDROID_API=30 \
+              -DRECOVERY_API_VERSION=3 \
+              -D_FILE_OFFSET_BITS=64 \
+              -I recovery/updater/include \
+              -I recovery/otautil/include \
+              -I libbase/include \
+              -I logging/log/include \
+              -I extras/liblp/include \
+              -I libziparchive/include \
+              $RECOVERY_SRCS \
+              $OTAUTIL_SRCS \
+              -lz -ldl \
+              -o build_out/update-binary
+          fi
+
+          $STRIP build_out/update-binary 2>/dev/null || true
           file build_out/update-binary
           ls -lh build_out/update-binary
 
