@@ -46,7 +46,7 @@ jobs:
       - name: Clone AOSP system/logging
         run: |
           git clone --depth=1 \
-            --branch android-11.0.0_r48 \
+            --branch android11-release \
             https://android.googlesource.com/platform/system/logging \
             logging
 
@@ -60,7 +60,7 @@ jobs:
       - name: Clone AOSP system/libbase
         run: |
           git clone --depth=1 \
-            --branch android-11.0.0_r48 \
+            --branch android10-release \
             https://android.googlesource.com/platform/system/libbase \
             libbase
 
