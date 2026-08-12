@@ -3,8 +3,12 @@ name: Build vendor tree from vendor.tar.gz
 on:
   workflow_dispatch:
     inputs:
+      vendor_tar_url:
+        description: "URL langsung ke vendor.tar.gz (Release asset). Kosongin kalau mau pake file yang udah ada di repo tree."
+        required: false
+        default: ""
       vendor_tar:
-        description: "Nama file vendor.tar.gz di root repo"
+        description: "Nama file vendor.tar.gz di root repo (dipakai kalau vendor_tar_url kosong)"
         required: true
         default: "vendor.tar.gz"
       out_dir:
@@ -28,53 +32,28 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          lfs: true
 
-      - name: Debug - git lfs status
+      - name: Download vendor.tar.gz dari Release asset (kalau URL diisi)
+        if: ${{ github.event.inputs.vendor_tar_url != '' }}
         run: |
-          echo "== git lfs version =="
-          git lfs version || echo "git-lfs BINARY GAK KETEMU DI RUNNER"
-
-          echo "== git lfs env =="
-          git lfs env || true
-
-          echo "== file terdaftar sbg LFS di repo ini =="
-          git lfs ls-files || true
-
-          echo "== .gitattributes =="
-          cat .gitattributes 2>/dev/null || echo "(gak ada .gitattributes -> vendor.tar.gz KEMUNGKINAN BESAR GAK KETRACK SEBAGAI LFS)"
-
-      - name: Force git lfs pull
-        run: |
-          git lfs install --local
-          git lfs pull
-          echo "== hasil setelah lfs pull =="
+          echo "Downloading dari: ${{ github.event.inputs.vendor_tar_url }}"
+          curl -L -o "${{ github.event.inputs.vendor_tar }}" "${{ github.event.inputs.vendor_tar_url }}"
           ls -la "${{ github.event.inputs.vendor_tar }}"
           file "${{ github.event.inputs.vendor_tar }}"
 
-      - name: Cek vendor.tar.gz beneran udah binary (bukan pointer)
-        run: |
-          FSIZE=$(stat -c%s "${{ github.event.inputs.vendor_tar }}")
-          echo "Ukuran file: $FSIZE bytes"
-          if head -c 200 "${{ github.event.inputs.vendor_tar }}" | grep -q "git-lfs.github.com"; then
-            echo "=========================================================="
-            echo "MASIH POINTER LFS, BUKAN FILE ASLI. Kemungkinan penyebab:"
-            echo "1) vendor.tar.gz gak ketrack .gitattributes filter=lfs pas awal commit"
-            echo "   -> berarti pointer-nya ke-commit sebagai TEKS BIASA (bukan lewat LFS filter),"
-            echo "      jadi 'git lfs pull' gak akan bisa narik apa-apa karena LFS server gak"
-            echo "      punya object itu (bukan bug workflow, bug cara commit awal)."
-            echo "2) LFS quota/storage repo abis atau butuh auth khusus."
-            echo "=========================================================="
-            cat "${{ github.event.inputs.vendor_tar }}"
-            exit 1
-          fi
-
-      - name: Cek vendor.tar.gz ada
+      - name: Cek vendor.tar.gz ada & bukan pointer LFS
         run: |
           if [ ! -f "${{ github.event.inputs.vendor_tar }}" ]; then
-            echo "File ${{ github.event.inputs.vendor_tar }} gak ketemu di root repo."
+            echo "File ${{ github.event.inputs.vendor_tar }} gak ketemu."
             exit 1
           fi
+          if head -c 200 "${{ github.event.inputs.vendor_tar }}" | grep -q "git-lfs.github.com"; then
+            echo "File ini masih pointer Git LFS (bukan binary asli)."
+            echo "Objeknya kemungkinan gak pernah keupload ke LFS storage repo ini."
+            echo "Isi input 'vendor_tar_url' pake link Release asset sebagai gantinya."
+            exit 1
+          fi
+          echo "OK, ukuran file: $(stat -c%s "${{ github.event.inputs.vendor_tar }}") bytes"
 
       - name: Extract vendor.tar.gz
         run: |
