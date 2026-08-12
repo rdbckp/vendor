@@ -1,0 +1,9 @@
+on early-init
+    # mount point & symlink khusus a02 kalau ada, isi sesuai kebutuhan
+    start vendor.mtk_hal_init
+
+on init
+    # setup permission node MTK di sini kalau perlu
+
+on boot
+    # property tuning tambahan

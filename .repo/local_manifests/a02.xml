@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <remote name="rdbckp" fetch="https://github.com/rdbckp/" />
+
+  <!-- Device tree ini sendiri -->
+  <project name="device_samsung_a02" path="device/samsung/a02" remote="rdbckp" revision="main" />
+
+  <!-- Kernel 32-bit (ganti branch sesuai kernel arm32 lo, JANGAN pake branch test_64) -->
+  <project name="a022f_kernel" path="kernel/samsung/a02" remote="rdbckp" revision="lineage-20" />
+
+  <!-- Vendor blobs -->
+  <project name="vendor_a02" path="vendor/samsung/a02" remote="rdbckp" revision="main" />
+</manifest>

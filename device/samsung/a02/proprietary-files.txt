@@ -1,0 +1,12 @@
+# proprietary-files.txt — isi list blob stok a02 di sini.
+# Format: path/di/device[;OPSI]
+# Contoh (SESUAIKAN sama vendor.tar.gz repack lo):
+#
+# vendor/lib/libmtkcam.so
+# vendor/lib/hw/audio.primary.mt6739.so
+# vendor/lib/hw/gps.default.so
+# vendor/bin/hw/android.hardware.gnss@2.0-service
+# vendor/etc/permissions/android.hardware.bluetooth.xml
+#
+# Jalanin ./extract-files.sh <path-ke-vendor.tar.gz-hasil-extract> buat auto-populate,
+# atau isi manual dari hasil `ls -R` vendor.tar.gz yang udah lo repack sebelumnya.
