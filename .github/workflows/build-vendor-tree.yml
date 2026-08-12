@@ -1,0 +1,79 @@
+name: Build vendor tree from vendor.tar.gz
+
+on:
+  workflow_dispatch:
+    inputs:
+      vendor_tar:
+        description: "Nama file vendor.tar.gz di root repo"
+        required: true
+        default: "vendor.tar.gz"
+      out_dir:
+        description: "Folder tujuan device (samsung/a02)"
+        required: true
+        default: "vendor/samsung/a02"
+      arch_filter:
+        description: "Filter arsitektur: 32 (skip lib64/bin64) atau all"
+        required: true
+        default: "32"
+      commit_message:
+        description: "Commit message"
+        required: true
+        default: "vendor: regenerate a02 proprietary blobs + makefiles"
+
+jobs:
+  build-vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cek vendor.tar.gz ada
+        run: |
+          if [ ! -f "${{ github.event.inputs.vendor_tar }}" ]; then
+            echo "File ${{ github.event.inputs.vendor_tar }} gak ketemu di root repo."
+            exit 1
+          fi
+
+      - name: Extract vendor.tar.gz
+        run: |
+          rm -rf _vendor_extract
+          mkdir -p _vendor_extract
+          tar -xzf "${{ github.event.inputs.vendor_tar }}" -C _vendor_extract
+          echo "== isi vendor.tar.gz =="
+          find _vendor_extract -maxdepth 3 | sort | head -100
+
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate proprietary tree + makefiles
+        run: |
+          python3 .github/scripts/gen_vendor_tree.py \
+            --src _vendor_extract \
+            --out "${{ github.event.inputs.out_dir }}" \
+            --arch-filter "${{ github.event.inputs.arch_filter }}"
+
+      - name: Cek hasil
+        run: |
+          echo "== proprietary-files.txt (head) =="
+          head -50 "${{ github.event.inputs.out_dir }}/proprietary-files.txt" || true
+          echo "== jumlah blob =="
+          find "${{ github.event.inputs.out_dir }}/proprietary" -type f | wc -l
+
+      - name: Cleanup tmp
+        run: rm -rf _vendor_extract
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Gak ada perubahan buat di-commit."
+            exit 0
+          fi
+          git commit -m "${{ github.event.inputs.commit_message }}"
+          git push
