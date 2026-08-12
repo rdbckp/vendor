@@ -1,0 +1,63 @@
+name: Deploy a02-aosp13-32bit structure
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_name:
+        description: "Nama file zip yang udah lo commit ke root repo ini"
+        required: true
+        default: "a02-aosp13-32bit.zip"
+      commit_message:
+        description: "Commit message"
+        required: true
+        default: "Add a02 device tree structure (AOSP13 32-bit)"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cek zip ada
+        run: |
+          if [ ! -f "${{ github.event.inputs.zip_name }}" ]; then
+            echo "File ${{ github.event.inputs.zip_name }} gak ketemu di root repo. Upload dulu lewat web UI/commit sebelum run action ini."
+            exit 1
+          fi
+
+      - name: Unzip ke root repo
+        run: |
+          mkdir -p _unzip_tmp
+          unzip -q "${{ github.event.inputs.zip_name }}" -d _unzip_tmp
+
+          # zip isinya folder pembungkus "a02-aosp13-32bit/", masuk ke situ lalu rsync ke root
+          SRC_DIR=$(find _unzip_tmp -mindepth 1 -maxdepth 1 -type d | head -n1)
+          if [ -z "$SRC_DIR" ]; then
+            echo "Gak ketemu folder di dalam zip"
+            exit 1
+          fi
+
+          rsync -a "$SRC_DIR"/ ./
+
+          rm -rf _unzip_tmp
+          rm -f "${{ github.event.inputs.zip_name }}"
+
+      - name: Cek hasil struktur
+        run: |
+          echo "== Tree hasil deploy =="
+          find device vendor .repo -type f 2>/dev/null | sort
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Gak ada perubahan buat di-commit."
+            exit 0
+          fi
+          git commit -m "${{ github.event.inputs.commit_message }}"
+          git push
