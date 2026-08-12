@@ -2,12 +2,12 @@
 <manifest>
   <remote name="rdbckp" fetch="https://github.com/rdbckp/" />
 
-  <!-- Device tree ini sendiri -->
-  <project name="device_samsung_a02" path="device/samsung/a02" remote="rdbckp" revision="main" />
+  <!-- Satu repo aja: device tree + vendor tree di-symlink dari sini -->
+  <project name="vendor" path="_rdbckp_vendor" remote="rdbckp" revision="main">
+    <linkfile src="device/samsung/a02" dest="device/samsung/a02" />
+    <linkfile src="vendor/samsung/a02" dest="vendor/samsung/a02" />
+  </project>
 
-  <!-- Kernel 32-bit (ganti branch sesuai kernel arm32 lo, JANGAN pake branch test_64) -->
+  <!-- Kernel tetep repo sendiri, beda codebase, gak bisa digabung tanpa mindahin source-nya -->
   <project name="a022f_kernel" path="kernel/samsung/a02" remote="rdbckp" revision="lineage-20" />
-
-  <!-- Vendor blobs -->
-  <project name="vendor_a02" path="vendor/samsung/a02" remote="rdbckp" revision="main" />
 </manifest>
