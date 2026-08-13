@@ -48,3 +48,6 @@ BOARD_VNDK_VERSION := current
 
 # ===== Include vendor blobs board config kalau ada =====
 -include vendor/samsung/a02/BoardConfigVendor.mk
+
+TARGET_SUPPORTS_32_BIT_APPS := true
+TARGET_SUPPORTS_64_BIT_APPS := false
