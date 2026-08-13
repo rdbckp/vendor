@@ -9,5 +9,5 @@
   </project>
 
   <!-- Kernel tetep repo sendiri, beda codebase, gak bisa digabung tanpa mindahin source-nya -->
-  <project name="a022f_kernel" path="kernel/samsung/a02" remote="rdbckp" revision="lineage-20" />
+  <project name="a022f_kernel" path="kernel/samsung/a02" remote="rdbckp" revision="186-master" />
 </manifest>
