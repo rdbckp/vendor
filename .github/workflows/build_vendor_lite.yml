@@ -113,6 +113,25 @@ jobs:
           repo sync -c -j$(nproc) --force-sync --no-clone-bundle --no-tags --optimized-fetch
           df -h
 
+      - name: Ubah symlink device/vendor jadi folder asli (AOSP find gak nembus symlink)
+        run: |
+          cd ~/lineage20
+          # Local manifest yang pakai <linkfile> bikin device/samsung/<device> dan
+          # vendor/samsung/<device> jadi symlink. Bash glob (vendorsetup.sh) nembus
+          # symlink, tapi `find` yang dipakai build system buat nyari AndroidProducts.mk
+          # TIDAK nembus symlink secara default -> product config gagal ketemu.
+          # Fix: ganti symlink jadi copy folder asli.
+          for link in device/samsung/${{ github.event.inputs.device }} vendor/samsung/${{ github.event.inputs.device }}; do
+            if [ -L "$link" ]; then
+              target=$(readlink -f "$link")
+              echo "Convert symlink: $link -> $target"
+              rm "$link"
+              cp -a "$target" "$link"
+            else
+              echo "$link bukan symlink, skip"
+            fi
+          done
+
       - name: Build vendor image (mode lite)
         env:
           WITHOUT_CHECK_API: "true"
