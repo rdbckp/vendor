@@ -1,6 +1,6 @@
 DEVICE_PATH := device/samsung/a02
 
-# ===== Architecture: 32-bit ARM, FIX HARGA MATI =====
+# ===== Architecture: 32-bit ARM =====
 TARGET_ARCH := arm
 TARGET_ARCH_VARIANT := armv7-a-neon
 TARGET_CPU_ABI := armeabi-v7a
@@ -23,7 +23,7 @@ TARGET_NO_BOOTLOADER := true
 TARGET_KERNEL_SOURCE := kernel/samsung/a02
 TARGET_KERNEL_CONFIG := a02_defconfig
 TARGET_KERNEL_ARCH := arm
-BOARD_KERNEL_IMAGE_NAME := Image
+BOARD_KERNEL_IMAGE_NAME := zImage
 
 # ===== Partisi (sesuaikan sama layout stok a02 lo) =====
 BOARD_BOOTIMAGE_PARTITION_SIZE := 41943040
