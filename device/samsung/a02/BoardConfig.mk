@@ -46,6 +46,10 @@ BOARD_USES_RECOVERY_AS_BOOT := false
 PRODUCT_FULL_TREBLE_OVERRIDE := true
 BOARD_VNDK_VERSION := current
 
+# ===== SELinux policy =====
+BOARD_PLAT_PRIVATE_SEPOLICY_DIR := device/samsung/a02/sepolicy/private
+BOARD_PLAT_PUBLIC_SEPOLICY_DIR  := device/samsung/a02/sepolicy/vendor
+
 # ===== Include vendor blobs board config kalau ada =====
 -include vendor/samsung/a02/BoardConfigVendor.mk
 
